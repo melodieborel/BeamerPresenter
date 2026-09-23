@@ -3,3 +3,6 @@ build/
 # Generated from Resources/AppIcon.iconset by make-icon.sh / build-app.sh
 Resources/BeamerPresenter.icns
 .DS_Store
+
+# Local Claude Code guidance for this fork — personal, not shared upstream.
+CLAUDE.md
