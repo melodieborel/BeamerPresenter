@@ -13,9 +13,9 @@
     <key>CFBundleIconFile</key>
     <string>BeamerPresenter</string>
     <key>CFBundleVersion</key>
-    <string>14</string>
+    <string>15</string>
     <key>CFBundleShortVersionString</key>
-    <string>4.7</string>
+    <string>5.0</string>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026</string>
     <key>ATSApplicationFontsPath</key>

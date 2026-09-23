@@ -1,5 +1,16 @@
 # Changelog
 
+## v5.0 — 2026-09-23
+
+- **Movie playback**: `\framemovie{file}{width}{height}` in a deck's `.tex`
+  (see collab-talk-alz-neuropixels/main.tex) is parsed the same way `\note{}`
+  already is, and overlaid with a real native `AVPlayer` positioned from the
+  poster's own PDF Link-annotation rect — no LaTeX/PDF multimedia embedding
+  involved (not viable: beamer's `\movie`/pdfcomment's `\pdfmovie` don't
+  compile under XeLaTeX, and media9/movie15 only play back through Flash,
+  dead since 2021). One shared `AVPlayer` per page, so play/pause from any
+  pane (presenter or audience) drives all of them together.
+
 ## v4.7 — 2026-08-23
 
 - CI now publishes a GitHub **Release** (`v<version>`) with the built `.deb`
