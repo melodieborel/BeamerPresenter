@@ -12,8 +12,28 @@ struct SlideView: View {
     var body: some View {
         ZStack {
             Color.black
+            // PDFKit's own PDFView is fully interactive by default -- link
+            // hover cursor, link clicks -- but nothing here has ever used
+            // that (navigation is keyboard/UI-driven, ink has its own gesture
+            // layer below). Left enabled, it silently wins the hover/click
+            // for any Link annotation on the page, including the movie
+            // poster's, ahead of MovieOverlay drawn on top of it: the cursor
+            // shows PDFKit's pointing-hand hover style, and clicking invokes
+            // nothing since PDFKit doesn't know how to run a /Launch action
+            // -- which looked exactly like "no controls, can't click play."
+            // Disabling hit-testing here removes PDFPageView as a competing
+            // target so MovieOverlay is unambiguously what receives clicks.
             PDFPageView(document: state.slideDoc, pageIndex: pageIndex)
+                .allowsHitTesting(false)
             AnnotationLayer(pageIndex: pageIndex, interactive: interactive)
+            // Every SlideView showing this page (presenter panes, audience
+            // window) gets the same MovieOverlay, which in turn fetches the
+            // same shared AVPlayer from state -- so play/pause pressed on any
+            // one of them plays everywhere, there's one audio pipeline either
+            // way (one Mac, one output device).
+            if let mark = state.movieMarks[pageIndex], let source = state.sourceURL {
+                MovieOverlay(pageIndex: pageIndex, mark: mark, deckFolder: source.deletingLastPathComponent())
+            }
         }
         .aspectRatio(state.slideAspect, contentMode: .fit)
     }

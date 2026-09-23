@@ -1,4 +1,5 @@
 .build/
+.swiftpm/
 build/
 # Generated from Resources/AppIcon.iconset by make-icon.sh / build-app.sh
 Resources/BeamerPresenter.icns
