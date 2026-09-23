@@ -1,6 +1,7 @@
 import SwiftUI
 import PDFKit
 import Combine
+import AVKit
 
 /// Active drawing tool on the slide.
 enum Tool { case none, pen, laser }
@@ -29,6 +30,7 @@ final class PresentationState: ObservableObject {
     @Published private(set) var slideDoc: PDFDocument?   // left half (or full page)
     @Published private(set) var notesDoc: PDFDocument?   // right half, nil for plain PDFs
     @Published private(set) var textNotes: [Int: String] = [:]   // notes parsed from a sibling .tex
+    @Published private(set) var movieMarks: [Int: MovieMark] = [:]   // \framemovie{} marks parsed from a sibling .tex
     @Published private(set) var pageCount: Int = 0
     @Published private(set) var isLoaded: Bool = false
 
@@ -104,6 +106,23 @@ final class PresentationState: ObservableObject {
 
     private var thumbCache: [Int: NSImage] = [:]
 
+    // One AVPlayer per page carrying a `\framemovie` mark, shared by every
+    // `MovieOverlay` showing that page (presenter's current/next panes, the
+    // audience window). They must be the literal same object, not separate
+    // players pointed at the same file — AVPlayer's playback state (play/
+    // pause/seek) isn't synced across instances, so a shared instance is what
+    // makes the presenter's play button actually control what the audience
+    // sees, instead of only the pane it was pressed in.
+    private var moviePlayers: [Int: AVPlayer] = [:]
+
+    /// Returns the shared player for this page, creating it on first use.
+    func moviePlayer(forPage pageIndex: Int, url: URL) -> AVPlayer {
+        if let existing = moviePlayers[pageIndex] { return existing }
+        let player = AVPlayer(url: url)
+        moviePlayers[pageIndex] = player
+        return player
+    }
+
     // MARK: - Loading
 
     @discardableResult
@@ -129,9 +148,14 @@ final class PresentationState: ObservableObject {
             let tex = TexNotes.load(forPDF: url, pageCount: doc.pageCount)
             textNotes = tex.isEmpty ? PptxNotes.load(forPDF: url, pageCount: doc.pageCount) : tex
         }
+        // Independent of the notes layout -- a movie frame can appear in a
+        // split (second-screen-notes) deck just as well as a plain one.
+        movieMarks = MediaMarks.load(forPDF: url, pageCount: doc.pageCount)
         title = url.deletingPathExtension().lastPathComponent
         loadScratch()
         thumbCache.removeAll()
+        moviePlayers.values.forEach { $0.pause() }
+        moviePlayers.removeAll()
         strokes.removeAll()
         currentStroke = []
         laserPoint = nil
@@ -160,6 +184,9 @@ final class PresentationState: ObservableObject {
         slideDoc = nil
         notesDoc = nil
         textNotes = [:]
+        movieMarks = [:]
+        moviePlayers.values.forEach { $0.pause() }
+        moviePlayers.removeAll()
         pageCount = 0
         title = ""
         thumbCache.removeAll()
