@@ -25,22 +25,45 @@ struct MovieMark {
     }
 }
 
-/// Reads `\framemovie{...}{...}{...}` marks straight from the `.tex` source
-/// next to a presentation, the same way `TexNotes` reads `\note{}` — same
-/// frame-counting walk, same `.nav`-based page mapping, kept as its own
-/// self-contained parser rather than sharing code with `TexNotes` (the two
-/// have different per-frame payloads and there's no third user yet to justify
-/// factoring out a shared walker).
+/// A 3D object (.usdz) placed via `\threedmark{file}` right before one of a
+/// frame's existing `\href{https://github.com/...}{...}` part links (see
+/// collab-talk-alz-neuropixels/main.tex, "Chronic implant" frame). Unlike
+/// `\framemovie`, the visible link is left pointing at GitHub on purpose --
+/// this marker only tells BeamerPresenter which local file to overlay live;
+/// a plain shared PDF still falls back to GitHub's own STL viewer. Several
+/// of these can exist on one frame, matched to that page's Link annotations
+/// **by order**, not by content -- see `Object3DOverlay` for the matching
+/// and its caveats.
+struct Object3DMark {
+    let file: String
+
+    func resolvedURL(inFolder folder: URL) -> URL? {
+        let candidates = [
+            folder.appendingPathComponent(file),
+            folder.appendingPathComponent("images").appendingPathComponent(file),
+            folder.appendingPathComponent("../medias").appendingPathComponent(file),
+        ]
+        return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+}
+
+/// Reads `\framemovie{...}{...}{...}` and `\threedmark{...}` marks straight
+/// from the `.tex` source next to a presentation, the same way `TexNotes`
+/// reads `\note{}` — same frame-counting walk, same `.nav`-based page
+/// mapping. Both mark kinds are collected in one pass over the source (kept
+/// together, rather than in separate self-contained parsers, since they're
+/// now two users of the exact same frame/page-mapping walk).
 enum MediaMarks {
-    /// Returns a page-index → mark map for the PDF, using the same `.tex`
-    /// candidate search as `TexNotes` (same base name first, then any other
-    /// `.tex` in the folder). Returns an empty map when nothing usable is found.
-    static func load(forPDF pdfURL: URL, pageCount: Int) -> [Int: MovieMark] {
+    /// Returns page-index → mark maps for the PDF (movies get at most one
+    /// mark per page; 3D objects can have several, in source order), using
+    /// the same `.tex` candidate search as `TexNotes` (same base name first,
+    /// then any other `.tex` in the folder).
+    static func load(forPDF pdfURL: URL, pageCount: Int) -> (movies: [Int: MovieMark], objects3D: [Int: [Object3DMark]]) {
         for texURL in candidateTexURLs(for: pdfURL) {
-            let marks = marks(fromTex: texURL, pageCount: pageCount)
-            if !marks.isEmpty { return marks }
+            let result = marks(fromTex: texURL, pageCount: pageCount)
+            if !result.movies.isEmpty || !result.objects3D.isEmpty { return result }
         }
-        return [:]
+        return ([:], [:])
     }
 
     private static func candidateTexURLs(for pdfURL: URL) -> [URL] {
@@ -53,30 +76,34 @@ enum MediaMarks {
         return [sameName] + others
     }
 
-    private static func marks(fromTex texURL: URL, pageCount: Int) -> [Int: MovieMark] {
-        guard let source = readText(texURL) else { return [:] }
+    private static func marks(fromTex texURL: URL, pageCount: Int) -> (movies: [Int: MovieMark], objects3D: [Int: [Object3DMark]]) {
+        guard let source = readText(texURL) else { return ([:], [:]) }
 
         let perFrame = framesWithMarks(in: source)
-        guard !perFrame.isEmpty else { return [:] }
+        guard !perFrame.movies.isEmpty || !perFrame.objects3D.isEmpty else { return ([:], [:]) }
 
         let navURL = texURL.deletingPathExtension().appendingPathExtension("nav")
         let ranges = readText(navURL).map(framePages) ?? []
 
-        var byPage: [Int: MovieMark] = [:]
-        for (frame, mark) in perFrame {
-            let pages: ClosedRange<Int>
-            if frame < ranges.count {
-                pages = ranges[frame]
-            } else if ranges.isEmpty {
-                pages = frame...frame
-            } else {
-                continue
-            }
-            for p in pages where p >= 0 && p < pageCount {
-                byPage[p] = mark
-            }
+        func pages(forFrame frame: Int) -> ClosedRange<Int>? {
+            if frame < ranges.count { return ranges[frame] }
+            if ranges.isEmpty { return frame...frame }
+            return nil
         }
-        return byPage
+
+        var movieByPage: [Int: MovieMark] = [:]
+        for (frame, mark) in perFrame.movies {
+            guard let pages = pages(forFrame: frame) else { continue }
+            for p in pages where p >= 0 && p < pageCount { movieByPage[p] = mark }
+        }
+
+        var objectsByPage: [Int: [Object3DMark]] = [:]
+        for (frame, marks) in perFrame.objects3D {
+            guard let pages = pages(forFrame: frame) else { continue }
+            for p in pages where p >= 0 && p < pageCount { objectsByPage[p] = marks }
+        }
+
+        return (movieByPage, objectsByPage)
     }
 
     // MARK: - File reading (identical to TexNotes)
@@ -106,12 +133,14 @@ enum MediaMarks {
     // MARK: - .tex parsing
 
     /// Walks the (comment-stripped) source, counting frames exactly like
-    /// `TexNotes` does, and collecting the `\framemovie{file}{w}{h}` call
-    /// belonging to each one.
-    private static func framesWithMarks(in rawSource: String) -> [Int: MovieMark] {
+    /// `TexNotes` does, and collecting each frame's `\framemovie{file}{w}{h}`
+    /// call (at most one -- a later one on the same frame overwrites) and
+    /// its `\threedmark{file}` calls (as many as appear, in source order).
+    private static func framesWithMarks(in rawSource: String) -> (movies: [Int: MovieMark], objects3D: [Int: [Object3DMark]]) {
         let chars = Array(stripComments(rawSource))
         let n = chars.count
-        var marks: [Int: MovieMark] = [:]
+        var movies: [Int: MovieMark] = [:]
+        var objects3D: [Int: [Object3DMark]] = [:]
         var frame = -1
         var i = 0
 
@@ -146,14 +175,21 @@ enum MediaMarks {
                 k = skipSpaces(chars, after2)
                 guard let (_, after3) = bracedGroup(chars, k) else { i = j; continue }
                 if frame >= 0 {
-                    marks[frame] = MovieMark(file: file)
+                    movies[frame] = MovieMark(file: file)
                 }
                 i = after3
+            case "threedmark":
+                let k = skipSpaces(chars, j)
+                guard let (file, after) = bracedGroup(chars, k) else { i = j; continue }
+                if frame >= 0 {
+                    objects3D[frame, default: []].append(Object3DMark(file: file))
+                }
+                i = after
             default:
                 i = j
             }
         }
-        return marks
+        return (movies, objects3D)
     }
 
     private static func skipSpaces(_ c: [Character], _ i: Int) -> Int {

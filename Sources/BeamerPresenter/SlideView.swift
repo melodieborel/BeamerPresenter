@@ -34,6 +34,9 @@ struct SlideView: View {
             if let mark = state.movieMarks[pageIndex], let source = state.sourceURL {
                 MovieOverlay(pageIndex: pageIndex, mark: mark, deckFolder: source.deletingLastPathComponent())
             }
+            if let marks = state.object3DMarks[pageIndex], let source = state.sourceURL {
+                Object3DOverlay(pageIndex: pageIndex, marks: marks, deckFolder: source.deletingLastPathComponent())
+            }
         }
         .aspectRatio(state.slideAspect, contentMode: .fit)
     }

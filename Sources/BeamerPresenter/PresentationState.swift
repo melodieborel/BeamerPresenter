@@ -31,6 +31,7 @@ final class PresentationState: ObservableObject {
     @Published private(set) var notesDoc: PDFDocument?   // right half, nil for plain PDFs
     @Published private(set) var textNotes: [Int: String] = [:]   // notes parsed from a sibling .tex
     @Published private(set) var movieMarks: [Int: MovieMark] = [:]   // \framemovie{} marks parsed from a sibling .tex
+    @Published private(set) var object3DMarks: [Int: [Object3DMark]] = [:]   // \threedmark{} marks parsed from a sibling .tex
     @Published private(set) var pageCount: Int = 0
     @Published private(set) var isLoaded: Bool = false
 
@@ -148,9 +149,12 @@ final class PresentationState: ObservableObject {
             let tex = TexNotes.load(forPDF: url, pageCount: doc.pageCount)
             textNotes = tex.isEmpty ? PptxNotes.load(forPDF: url, pageCount: doc.pageCount) : tex
         }
-        // Independent of the notes layout -- a movie frame can appear in a
-        // split (second-screen-notes) deck just as well as a plain one.
-        movieMarks = MediaMarks.load(forPDF: url, pageCount: doc.pageCount)
+        // Independent of the notes layout -- a movie/3D-object frame can
+        // appear in a split (second-screen-notes) deck just as well as a
+        // plain one.
+        let media = MediaMarks.load(forPDF: url, pageCount: doc.pageCount)
+        movieMarks = media.movies
+        object3DMarks = media.objects3D
         title = url.deletingPathExtension().lastPathComponent
         loadScratch()
         thumbCache.removeAll()
@@ -185,6 +189,7 @@ final class PresentationState: ObservableObject {
         notesDoc = nil
         textNotes = [:]
         movieMarks = [:]
+        object3DMarks = [:]
         moviePlayers.values.forEach { $0.pause() }
         moviePlayers.removeAll()
         pageCount = 0
