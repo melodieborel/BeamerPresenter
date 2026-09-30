@@ -14,6 +14,9 @@
 #
 #   ./build-app.sh "Developer ID Application: Your Name (TEAMID)"
 #
+# On success the app is also installed to /Applications, replacing the previous
+# copy (NO_INSTALL=1 to skip, INSTALL_DIR=~/Applications to install elsewhere).
+#
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -81,4 +84,25 @@ if [ -n "$SIGN_IDENTITY" ]; then
 fi
 
 echo "✓ Built $APP"
-echo "  Open it with:  open \"$APP\""
+
+# Install the fresh build into /Applications (skip with NO_INSTALL=1). This only
+# runs after every step above succeeded (set -e), so a failed build never touches
+# the installed copy. The swap is atomic: copy to a temp name, then rename over.
+INSTALL_DIR="${INSTALL_DIR:-/Applications}"
+if [ -z "${NO_INSTALL:-}" ]; then
+    DEST="$INSTALL_DIR/$APP_NAME.app"
+    TMP="$INSTALL_DIR/.$APP_NAME.app.installing"
+    echo "▶︎ Installing to ${DEST}…"
+    rm -rf "$TMP"
+    ditto "$APP" "$TMP"
+    rm -rf "$DEST.previous"
+    [ -d "$DEST" ] && mv "$DEST" "$DEST.previous"
+    mv "$TMP" "$DEST"
+    rm -rf "$DEST.previous"
+    # Tell LaunchServices about the new bundle so Spotlight/Dock pick it up.
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST" 2>/dev/null || true
+    echo "✓ Installed $DEST ($BUILD_ID)"
+    echo "  (A running instance keeps the old version until you relaunch it.)"
+else
+    echo "  Open it with:  open \"$APP\""
+fi

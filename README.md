@@ -178,8 +178,13 @@ everything with `Info.plist`:
 
 ```bash
 ./build-app.sh
-open build/BeamerPresenter.app
+open /Applications/BeamerPresenter.app
 ```
+
+Each successful build is also installed to `/Applications/BeamerPresenter.app`,
+so the installed app is always the latest build that compiled. A failed build
+leaves the previous install untouched. Use `NO_INSTALL=1 ./build-app.sh` to
+skip installing, or `INSTALL_DIR=~/Applications` to install somewhere else.
 
 To codesign for distribution, pass your Developer ID:
 
