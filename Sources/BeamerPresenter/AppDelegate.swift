@@ -960,6 +960,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         // While typing in a text field (e.g. the scratch notes), still let the
         // arrow / page keys drive the slides; everything else edits the text.
+        // Same while a live web page (e.g. Pinpoint) has focus: the page gets
+        // its own keyboard controls; the arrows/page keys, esc and F (shrink it
+        // back to its placeholder) stay with the deck.
+        if (NSApp.keyWindow?.firstResponder as? NSView)?.isInsideWebView == true {
+            switch event.keyCode {
+            case 124, 121: state.next()                  // → / page down
+            case 123, 116: state.previous()              // ← / page up
+            case 3:        state.webExpanded.toggle()    // F
+            case 53:       NSApp.keyWindow?.makeFirstResponder(nil)   // esc: hand keys back to the deck
+            default:       return false
+            }
+            return true
+        }
+
         if NSApp.keyWindow?.firstResponder is NSTextView {
             switch event.keyCode {
             case 124, 121: state.next()       // → / page down
@@ -976,6 +990,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         case 119:          state.goToLast()          // end
         case 5:            state.showOverview.toggle()   // G
         case 11:           state.blackout.toggle()       // B
+        case 3:            state.webExpanded.toggle()    // F: live web page fills the slide
         case 15:           state.resetTimer()            // R
         case 13:           state.toggleBoard()           // W
         case 35:           state.toggleTool(.pen)        // P

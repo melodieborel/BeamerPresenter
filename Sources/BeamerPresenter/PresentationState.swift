@@ -30,8 +30,11 @@ final class PresentationState: ObservableObject {
     @Published private(set) var slideDoc: PDFDocument?   // left half (or full page)
     @Published private(set) var notesDoc: PDFDocument?   // right half, nil for plain PDFs
     @Published private(set) var textNotes: [Int: String] = [:]   // notes parsed from a sibling .tex
-    @Published private(set) var movieMarks: [Int: MovieMark] = [:]   // \framemovie{} marks parsed from a sibling .tex
+    @Published private(set) var movieMarks: [Int: [MovieMark]] = [:]   // \framemovie{} / \href{run:movie} marks parsed from a sibling .tex
     @Published private(set) var object3DMarks: [Int: [Object3DMark]] = [:]   // \threedmark{} marks parsed from a sibling .tex
+    @Published private(set) var webMarks: [Int: [WebMark]] = [:]   // \webmark{} marks parsed from a sibling .tex
+    /// `F`: a live web page fills the whole slide instead of its placeholder.
+    @Published var webExpanded = false
     @Published private(set) var pageCount: Int = 0
     @Published private(set) var isLoaded: Bool = false
 
@@ -107,21 +110,57 @@ final class PresentationState: ObservableObject {
 
     private var thumbCache: [Int: NSImage] = [:]
 
-    // One AVPlayer per page carrying a `\framemovie` mark, shared by every
-    // `MovieOverlay` showing that page (presenter's current/next panes, the
-    // audience window). They must be the literal same object, not separate
-    // players pointed at the same file — AVPlayer's playback state (play/
-    // pause/seek) isn't synced across instances, so a shared instance is what
-    // makes the presenter's play button actually control what the audience
-    // sees, instead of only the pane it was pressed in.
-    private var moviePlayers: [Int: AVPlayer] = [:]
+    // One AVPlayer per movie on a page, shared by every `MovieOverlay`
+    // showing that page (presenter's current/next panes, the audience
+    // window). They must be the literal same object, not separate players
+    // pointed at the same file — AVPlayer's playback state (play/pause/seek)
+    // isn't synced across instances, so a shared instance is what makes the
+    // presenter's play button actually control what the audience sees,
+    // instead of only the pane it was pressed in.
+    private var moviePlayers: [String: AVPlayer] = [:]
+    private var loopingPlayers: Set<ObjectIdentifier> = []
 
-    /// Returns the shared player for this page, creating it on first use.
+    /// Returns the shared player for this movie on this page, creating it on
+    /// first use. A movie with no audio track is an animation standing in for
+    /// a GIF: muted and looping (`isLoopingMovie`), started by its overlay.
     func moviePlayer(forPage pageIndex: Int, url: URL) -> AVPlayer {
-        if let existing = moviePlayers[pageIndex] { return existing }
+        let key = "\(pageIndex)|\(url.path)"
+        if let existing = moviePlayers[key] { return existing }
         let player = AVPlayer(url: url)
-        moviePlayers[pageIndex] = player
+        if AVURLAsset(url: url).tracks(withMediaType: .audio).isEmpty {
+            player.isMuted = true
+            player.actionAtItemEnd = .none
+            NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime, object: player.currentItem, queue: .main) { _ in
+                player.seek(to: .zero)
+                player.play()
+            }
+            loopingPlayers.insert(ObjectIdentifier(player))
+        }
+        moviePlayers[key] = player
         return player
+    }
+
+    func isLoopingMovie(_ player: AVPlayer) -> Bool { loopingPlayers.contains(ObjectIdentifier(player)) }
+
+    // One live page per `\webmark`, keyed by its link -- see `WebPage`.
+    private var webPages: [String: WebPage] = [:]
+
+    func webPage(for mark: WebMark, deckFolder: URL) -> WebPage {
+        let key = mark.link ?? ""
+        if let existing = webPages[key] { return existing }
+        let page = WebPage(url: URL(string: key) ?? URL(string: "about:blank")!,
+                           fileURL: mark.resolvedFileURL(inFolder: deckFolder))
+        webPages[key] = page
+        return page
+    }
+
+    private func resetMedia() {
+        moviePlayers.values.forEach { $0.pause() }
+        moviePlayers.removeAll()
+        loopingPlayers.removeAll()
+        webPages.removeAll()
+        webExpanded = false
     }
 
     // MARK: - Loading
@@ -155,11 +194,14 @@ final class PresentationState: ObservableObject {
         let media = MediaMarks.load(forPDF: url, pageCount: doc.pageCount)
         movieMarks = media.movies
         object3DMarks = media.objects3D
+        webMarks = media.webs
         title = url.deletingPathExtension().lastPathComponent
         loadScratch()
         thumbCache.removeAll()
-        moviePlayers.values.forEach { $0.pause() }
-        moviePlayers.removeAll()
+        resetMedia()
+        // Start loading every live page now, not when its slide comes up.
+        let folder = url.deletingLastPathComponent()
+        media.webs.values.joined().forEach { _ = webPage(for: $0, deckFolder: folder) }
         strokes.removeAll()
         currentStroke = []
         laserPoint = nil
@@ -190,8 +232,8 @@ final class PresentationState: ObservableObject {
         textNotes = [:]
         movieMarks = [:]
         object3DMarks = [:]
-        moviePlayers.values.forEach { $0.pause() }
-        moviePlayers.removeAll()
+        webMarks = [:]
+        resetMedia()
         pageCount = 0
         title = ""
         thumbCache.removeAll()

@@ -21,7 +21,7 @@ struct AudienceView: View {
                         }
                     }
             } else {
-                SlideView(pageIndex: state.index, interactive: false)
+                SlideView(pageIndex: state.index, interactive: false, liveWeb: true)
             }
             // Black-out is an overlay so `B` also covers a live Mentimeter poll
             // (without tearing down the web view / losing the session underneath).

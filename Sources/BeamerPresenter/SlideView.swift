@@ -8,6 +8,8 @@ struct SlideView: View {
     @EnvironmentObject var state: PresentationState
     let pageIndex: Int
     let interactive: Bool
+    /// Only the audience window shows live web pages (see `WebOverlay`).
+    var liveWeb = false
 
     var body: some View {
         ZStack {
@@ -31,11 +33,14 @@ struct SlideView: View {
             // same shared AVPlayer from state -- so play/pause pressed on any
             // one of them plays everywhere, there's one audio pipeline either
             // way (one Mac, one output device).
-            if let mark = state.movieMarks[pageIndex], let source = state.sourceURL {
-                MovieOverlay(pageIndex: pageIndex, mark: mark, deckFolder: source.deletingLastPathComponent())
+            if let marks = state.movieMarks[pageIndex], let source = state.sourceURL {
+                MovieOverlay(pageIndex: pageIndex, marks: marks, deckFolder: source.deletingLastPathComponent())
             }
             if let marks = state.object3DMarks[pageIndex], let source = state.sourceURL {
                 Object3DOverlay(pageIndex: pageIndex, marks: marks, deckFolder: source.deletingLastPathComponent())
+            }
+            if liveWeb, let marks = state.webMarks[pageIndex], let source = state.sourceURL {
+                WebOverlay(pageIndex: pageIndex, marks: marks, deckFolder: source.deletingLastPathComponent())
             }
         }
         .aspectRatio(state.slideAspect, contentMode: .fit)
