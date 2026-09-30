@@ -10,7 +10,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.blackScreenImage) private var blackImage = ""
     @AppStorage(Prefs.showStatusItem) private var showStatusItem = true
     @AppStorage(Prefs.backgroundMode) private var backgroundMode = false
-    @AppStorage(Prefs.audienceFullscreen) private var audienceFullscreen = false
+    @AppStorage(Prefs.audienceFullscreen) private var audienceFullscreen = true
 
     var body: some View {
         Form {
@@ -33,7 +33,7 @@ struct SettingsView: View {
                     .onChange(of: audienceFullscreen) { _ in
                         NotificationCenter.default.post(name: .audienceModeChanged, object: nil)
                     }
-                Text("Off (default) shows the audience as a normal, resizable window — the green button enters full screen. On fills the external display edge to edge, covering the menu bar.")
+                Text("On (default) fills the external display edge to edge, covering the menu bar. Off shows the audience as a normal, resizable window — the green button enters full screen.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

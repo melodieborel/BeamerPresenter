@@ -808,10 +808,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     /// Whether the audience window fills the external display (borderless) or is a
-    /// normal, resizable window. Defaults to a normal window — borderless fill is
-    /// opt-in via the menu/settings (and needs a second display).
+    /// normal, resizable window. Defaults to filling the display — a normal window
+    /// is opt-out via the menu/settings (and fill needs a second display).
     private var audienceFillsExternal: Bool {
-        (UserDefaults.standard.object(forKey: Prefs.audienceFullscreen) as? Bool ?? false)
+        (UserDefaults.standard.object(forKey: Prefs.audienceFullscreen) as? Bool ?? true)
             && NSScreen.screens.count > 1
     }
 
@@ -888,7 +888,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     @objc private func toggleAudienceFullscreen(_ sender: Any?) {
-        let current = UserDefaults.standard.object(forKey: Prefs.audienceFullscreen) as? Bool ?? false
+        let current = UserDefaults.standard.object(forKey: Prefs.audienceFullscreen) as? Bool ?? true
         UserDefaults.standard.set(!current, forKey: Prefs.audienceFullscreen)
         rebuildAudienceWindow()
         updateAudienceMenuTitle()
