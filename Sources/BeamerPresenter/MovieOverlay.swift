@@ -29,7 +29,7 @@ struct MovieOverlay: View {
         GeometryReader { geo in
             ForEach(Array(placed.enumerated()), id: \.offset) { _, item in
                 let player = state.moviePlayer(forPage: pageIndex, url: item.url)
-                VideoPlayer(player: player)
+                PlayerView(player: player)
                     .frame(width: geo.size.width * item.rect.width, height: geo.size.height * item.rect.height)
                     .position(x: geo.size.width * item.rect.midX, y: geo.size.height * item.rect.midY)
                     .onAppear { if state.isLoopingMovie(player) { player.play() } }
@@ -46,5 +46,25 @@ struct MovieOverlay: View {
                   let rect = unitRect(of: link, on: page) else { return nil }
             return (url, rect)
         }
+    }
+}
+
+/// AppKit's `AVPlayerView` wrapped directly, instead of SwiftUI's `VideoPlayer`:
+/// on macOS 27 `VideoPlayer` aborts the app the first time it's drawn ("failed
+/// to demangle superclass of VideoPlayerView from mangled name
+/// 'So12AVPlayerViewC'") -- its `AVPlayerView` superclass can't be resolved at
+/// runtime. Referencing `AVPlayerView` here also makes the binary link AVKit.
+private struct PlayerView: NSViewRepresentable {
+    let player: AVPlayer
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        view.player = player
+        view.controlsStyle = .inline
+        return view
+    }
+
+    func updateNSView(_ view: AVPlayerView, context: Context) {
+        if view.player !== player { view.player = player }
     }
 }
