@@ -35,7 +35,7 @@ enum TexNotes {
     /// Parses one `.tex` file into a page-index → note map, using the sibling
     /// `.nav` (same base name) for exact page ranges when available.
     private static func notes(fromTex texURL: URL, pageCount: Int) -> [Int: String] {
-        guard let source = readText(texURL) else { return [:] }
+        guard let source = expandedSource(of: texURL) else { return [:] }
 
         let notes = framesWithNotes(in: source)        // frameIndex → cleaned note
         guard !notes.isEmpty else { return [:] }
@@ -65,6 +65,36 @@ enum TexNotes {
     private static func readText(_ url: URL) -> String? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
+    }
+
+    /// The comment-stripped source of `texURL` with every `\input{file}` /
+    /// `\include{file}` replaced by that file's own (stripped, expanded)
+    /// source, so frames kept in shared files are seen in document order --
+    /// by this reader and by `MediaMarks`. Paths resolve like LaTeX does:
+    /// against the main `.tex`'s folder (not the including file's), `.tex`
+    /// added when there's no extension. Files not found there (e.g. reached
+    /// only through TEXINPUTS) are left as the plain `\input` call.
+    static func expandedSource(of texURL: URL) -> String? {
+        guard let source = readText(texURL) else { return nil }
+        return expandInputs(stripComments(source), folder: texURL.deletingLastPathComponent(), depth: 0)
+    }
+
+    private static func expandInputs(_ source: String, folder: URL, depth: Int) -> String {
+        guard depth < 10,                                  // guards \input cycles
+              let re = try? NSRegularExpression(pattern: #"\\(?:input|include)\s*\{([^{}]+)\}"#)
+        else { return source }
+        let ns = source as NSString
+        var out = ""
+        var last = 0
+        for m in re.matches(in: source, range: NSRange(location: 0, length: ns.length)) {
+            var name = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespaces)
+            if (name as NSString).pathExtension.isEmpty { name += ".tex" }
+            guard let included = readText(folder.appendingPathComponent(name)) else { continue }
+            out += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            out += expandInputs(stripComments(included), folder: folder, depth: depth + 1)
+            last = m.range.location + m.range.length
+        }
+        return out + ns.substring(from: last)
     }
 
     // MARK: - .nav parsing

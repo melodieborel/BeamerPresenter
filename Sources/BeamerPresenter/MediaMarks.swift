@@ -3,8 +3,9 @@ import PDFKit
 
 /// Resolves a file named in the `.tex` source against the deck's folder,
 /// trying the same relative locations `\graphicspath{{../medias/}{images/}}`
-/// in main.tex searches, plus the folder itself. Returns the first that
-/// actually exists.
+/// searches (Communication/common/haylabtalk.sty), plus the folder itself.
+/// Returns the first that actually exists. Media used by a frame shared via
+/// `\input` can be named relative to the talk (`../../common/images/x.mp4`).
 func resolveDeckFile(_ file: String, inFolder folder: URL) -> URL? {
     let candidates = [
         folder.appendingPathComponent(file),
@@ -15,7 +16,7 @@ func resolveDeckFile(_ file: String, inFolder folder: URL) -> URL? {
 }
 
 /// A movie placed on one frame, either via `\framemovie{file}{width}{height}`
-/// (see collab-talk-alz-neuropixels/main.tex for the macro definition and why
+/// (see Communication/common/haylabtalk.sty for the macro definition and why
 /// real PDF-embedded video isn't viable) or via a bare
 /// `\href{run:file}{poster}` -- which is all `\framemovie` expands to, and
 /// what a movie placed inside a tikz node uses directly. The overlay is
@@ -35,7 +36,7 @@ struct MovieMark {
 
 /// A 3D object (.usdz) placed via `\threedmark{file}` right before one of a
 /// frame's existing `\href{https://github.com/...}{...}` part links (see
-/// collab-talk-alz-neuropixels/main.tex, "Chronic implant" frame). Unlike
+/// Communication/talks/2026-09-collab-alz-npx/main.tex, "Chronic implant" frame). Unlike
 /// `\framemovie`, the visible link is left pointing at GitHub on purpose --
 /// this marker only tells BeamerPresenter which local file to overlay live;
 /// a plain shared PDF still falls back to GitHub's own STL viewer. `link` is
@@ -135,7 +136,7 @@ enum MediaMarks {
     }
 
     private static func marks(fromTex texURL: URL, pageCount: Int) -> MediaMarkSet {
-        guard let source = readText(texURL) else { return MediaMarkSet() }
+        guard let source = TexNotes.expandedSource(of: texURL) else { return MediaMarkSet() }
 
         let perFrame = framesWithMarks(in: source)
         guard !perFrame.isEmpty else { return MediaMarkSet() }

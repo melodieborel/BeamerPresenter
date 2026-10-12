@@ -114,6 +114,11 @@ so overlays line up); otherwise each frame is treated as one page. A plain PDF
 with neither notes layout nor a `.tex` still presents fine — the notes pane just
 shows a hint instead.
 
+Frames kept in separate files are read too: every `\input{…}` / `\include{…}`
+is followed (recursively), with paths resolved like LaTeX does — relative to the
+main `.tex`'s folder, `.tex` added when there's no extension. This also applies
+to the movie / 3D / web marks below.
+
 ## Run it (development)
 
 Requires Xcode / the Swift toolchain on macOS 13+.
